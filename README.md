@@ -5,7 +5,73 @@ Run it with:
 npx ts-node src/index.ts
 ```
 
+## Problem Description
+I am developing a map with [deck.gl](http://deck.gl/).
+
+I have a large dataset indexed with geohashes in PostGIS and have developed a custom TileLayer / Tileset implementation that uses Geohashes instead of Google tiles to visualize the data. It works well, but I am now looking to reduce the response size by exploring the MVT format.
+
+I want to decode the `single-output.mvt` file and transform the local coordinates back into global LatLng. Most libraries handle Google tiles, but not geohashes, which is the crux of my issue.
+
+When using [@loaders.gl/mvt](https://github.com/visgl/loaders.gl/blob/master/modules/mvt/src/lib/parse-mvt.ts#L25), it can return normalized local coordinates in GeoJSON like [0.02880859375, 0.00830078125]. Given the known geohash and its boundaries in Lat/Lng, I need to figure out how to project those local values back into global LatLng values.
+
+PostGIS uses an affine transformation to encode it, but I'm not sure how to reverse it:
+
+https://github.com/postgis/postgis/blob/master/postgis/mvt.c#L959
+
+And [loaders.gl](http://loaders.gl) uses some interesting math that I might have to adapt to geohashes or lat/lng when decoding google tiles:
+
+https://github.com/visgl/loaders.gl/blob/master/modules/mvt/src/lib/mapbox-vector-tile/vector-tile-feature.ts#L194
+
+## MVT File
 `single-output.mvt` is the output from a postgis query that looks like this:
 ```sql
 select ST_AsMVT(s.*) from ( select ST_AsMVTGeom(geom, ST_GeomFromGeohash('9q5’)) from my_table where geohash3 = '9q5’ ) as s;
+```
+
+## index.ts output
+The output looks like this:
+```
+bounds: {
+  sw: { lat: 33.75, lon: -119.53125 },
+  ne: { lat: 35.15625, lon: -118.125 }
+}
+width and height: 1.40625 1.40625
+local coordinates: [
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -0.02880859375,
+            0.00830078125
+          ],
+          [
+            -0.02880859375,
+            0.00830078125
+          ],
+          [
+            -0.02880859375,
+            0.00830078125
+          ],
+          [
+            -0.02880859375,
+            0.00830078125
+          ],
+          [
+            -0.02880859375,
+            0.00830078125
+          ]
+        ]
+      ]
+    },
+    "properties": {
+      "network_performance": 2
+    }
+  }
+]
+
+How can I transform my local coordinates into these coordinates?
+expected result: POLYGON ((-118.9306641 34.9244911, -118.928833 34.9260098, -118.927002 34.9244911, -118.928833 34.9229723, -118.9306641 34.9244911))
 ```
